@@ -28,17 +28,31 @@ fn handle_request(stream: &mut TcpStream) {
     let request: String = String::from_utf8_lossy(&buffer).to_string();
     let request_endpoint = request.split_whitespace().nth(1).unwrap();
 
-    let status_code: &str;
+    let mut status_code: &str = "200 OK";
+    let mut headers: Vec<String> = Vec::new();
+    let mut body: String = "".to_string();
 
-    match request_endpoint {
-        "/" => {
-            status_code = "200 OK";
-        }
-        _ => {
-            status_code = "404 Not Found";
-        }
+    if request_endpoint == "/" {
+        
+    } else if request_endpoint.to_string().starts_with("/echo/") {
+        body = request_endpoint.to_string().replace("/echo/", "");
+
+        headers.push("Content-Type: text/plain".to_string());
+        headers.push(format!("Content-Length: {}", body.len()));
+    } else {
+        status_code = "404 Not Found";
     }
 
-    stream.write(format!("HTTP/1.1 {}\r\n\r\n", status_code).as_bytes()).unwrap();
+    let mut response = format!("HTTP/1.1 {}\r\n", status_code);
+
+    for header in headers {
+        response.push_str(header.as_str());
+        response.push_str("\r\n");
+    }
+
+    response.push_str("\r\n");
+    response.push_str(body.as_str());
+
+    stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
