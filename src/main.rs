@@ -1,19 +1,32 @@
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    thread
+    thread,
+    env,
+    fs
 };
+
+use itertools::Itertools;
 
 fn main() {
     println!("Logs from your program will appear here!");
+
+    let args = env::args().collect_vec();
+    let files_directory_arg_index = args.iter().enumerate().find(|&(_, ref s)| s== &"--directory").map(|(index, _)| index);
+    let mut files_directory: Option<String> = None;
+
+    if files_directory_arg_index.is_some() {
+        files_directory = Some(args[files_directory_arg_index.unwrap() + 1].clone());
+    }
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
         match stream {
             Ok(mut _stream) => {
+                let files_directory_clone = files_directory.clone();
                 thread::spawn(move || {
-                    handle_request(&mut _stream)
+                    handle_request(&mut _stream, files_directory_clone)
                 });
             }
             Err(e) => {
@@ -24,7 +37,7 @@ fn main() {
 }
 
 
-fn handle_request(stream: &mut TcpStream) {
+fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).unwrap();
 
@@ -48,6 +61,19 @@ fn handle_request(stream: &mut TcpStream) {
         body = request_endpoint.to_string().replace("/echo/", "");
     } else if request_endpoint == "/user-agent" {
         body = user_agent_header.expect("User Agent header exists").split(": ").nth(1).expect("User Agent has a value").to_string()
+    } else if request_endpoint.starts_with("/files/") {
+        // get file path
+        let file_path = request_endpoint.strip_prefix("/files").unwrap();
+
+        // read the file
+        let contents_result = fs::read_to_string(files_directory.expect("Files directory exists when requesting for a file") + file_path);
+
+        if contents_result.is_err() {
+            status_code = "404 Not Found";
+        } else {
+            body = contents_result.unwrap();
+            content_type = "application/octet-stream";
+        }
     } else {
         status_code = "404 Not Found";
     }
