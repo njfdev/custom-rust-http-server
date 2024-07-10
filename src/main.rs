@@ -1,9 +1,5 @@
 use std::{
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    thread,
-    env,
-    fs
+    env, fs, io::{Read, Write}, net::{TcpListener, TcpStream}, thread
 };
 
 use itertools::Itertools;
@@ -42,12 +38,14 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     stream.read(&mut buffer).unwrap();
 
     let request: String = String::from_utf8_lossy(&buffer).to_string();
-    let request_endpoint = request.split_whitespace().nth(1).unwrap();
+    let request_endpoint = request.split_whitespace().nth(1).expect("Request Endpoint in Request Header");
+    let http_action = request.split_whitespace().nth(0).expect("HTTP Action in Request Header");
 
     // request data
     let header = request.split("\r\n\r\n").nth(0).unwrap();
     let req_headers: Vec<String> = header.split("\r\n").skip(1).map(|s| s.to_string()).collect();
-    let user_agent_header = req_headers.into_iter().filter(|s| s.to_ascii_lowercase().starts_with("user-agent: ")).nth(0);
+    let user_agent_header = req_headers.clone().into_iter().filter(|s| s.to_ascii_lowercase().starts_with("user-agent: ")).nth(0);
+    let request_body = request.split("\r\n\r\n").nth(1).unwrap();
 
     // response variables
     let mut status_code: &str = "200 OK";
@@ -65,14 +63,30 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
         // get file path
         let file_path = request_endpoint.strip_prefix("/files").unwrap();
 
-        // read the file
-        let contents_result = fs::read_to_string(files_directory.expect("Files directory exists when requesting for a file") + file_path);
+        let absolute_path = files_directory.expect("Files directory exists when requesting for a file") + file_path;
 
-        if contents_result.is_err() {
-            status_code = "404 Not Found";
-        } else {
-            body = contents_result.unwrap();
-            content_type = "application/octet-stream";
+        if http_action == "GET" {
+
+            // read the file
+            let contents_result = fs::read_to_string(absolute_path);
+
+            if contents_result.is_err() {
+                status_code = "404 Not Found";
+            } else {
+                body = contents_result.unwrap();
+                content_type = "application/octet-stream";
+            }
+        } else if http_action == "POST" {
+            let content_length_header = req_headers.clone().into_iter().filter(|s| s.to_ascii_lowercase().starts_with("content-length: ")).exactly_one().expect("Content-Length header to exist");
+            let content_length = content_length_header.split(": ").nth(1).unwrap().parse::<usize>().expect("Content-Length to be a number");
+
+            let write_result = fs::write(absolute_path, request_body.chars().take(content_length).collect::<String>());
+
+            if write_result.is_ok() {
+                status_code = "201 Created";
+            } else {
+                status_code = "500 Internal Server Error";
+            }
         }
     } else {
         status_code = "404 Not Found";
