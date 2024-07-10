@@ -44,7 +44,8 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     // request data
     let header = request.split("\r\n\r\n").nth(0).unwrap();
     let req_headers: Vec<String> = header.split("\r\n").skip(1).map(|s| s.to_string()).collect();
-    let user_agent_header = req_headers.clone().into_iter().filter(|s| s.to_ascii_lowercase().starts_with("user-agent: ")).nth(0);
+    let user_agent_header = req_headers.clone().into_iter().filter(|s| s.to_lowercase().starts_with("user-agent: ")).nth(0);
+    let accept_encoding_header = req_headers.clone().into_iter().filter(|s| s.to_lowercase().starts_with("accept-encoding: ")).nth(0);
     let request_body = request.split("\r\n\r\n").nth(1).unwrap();
 
     // response variables
@@ -96,6 +97,14 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     if body.len() > 0 {
         headers.push(format!("Content-Type: {}", content_type));
         headers.push(format!("Content-Length: {}", body.len()));
+
+        if accept_encoding_header.is_some() {
+            let accept_encoding = accept_encoding_header.unwrap().split(": ").nth(1).expect("Accept-Encoding header to have a value").to_string();
+
+            if accept_encoding == "gzip" {
+                headers.push(format!("Content-Encoding: {}", accept_encoding))
+            }
+        }
     }
 
     let mut response = format!("HTTP/1.1 {}\r\n", status_code);
