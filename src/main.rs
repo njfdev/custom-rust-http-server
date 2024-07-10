@@ -1,7 +1,10 @@
 use std::{
     env, fs, io::{Read, Write}, net::{TcpListener, TcpStream}, thread
 };
-
+use flate2::{
+    write::GzEncoder,
+    Compression
+};
 use itertools::Itertools;
 
 fn main() {
@@ -33,6 +36,13 @@ fn main() {
 }
 
 
+fn gzip_string(input: &str) -> Result<Vec<u8>, std::io::Error> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let _ = encoder.write_all(input.as_bytes());
+    encoder.finish()
+}
+
+
 fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).unwrap();
@@ -53,6 +63,7 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     let mut content_type: &str = "text/plain";
     let mut headers: Vec<String> = Vec::new();
     let mut body: String = "".to_string();
+    let mut encoded_body: Vec<u8> = Vec::new();
 
     if request_endpoint == "/" {
         
@@ -96,7 +107,6 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
     // if there is a body, add required headers
     if body.len() > 0 {
         headers.push(format!("Content-Type: {}", content_type));
-        headers.push(format!("Content-Length: {}", body.len()));
 
         if accept_encoding_header.is_some() {
             let accept_encoding_string = accept_encoding_header.unwrap().split(": ").nth(1).expect("Accept-Encoding header to have a value").to_string();
@@ -104,20 +114,31 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
 
             if accept_encodings.contains(&"gzip") {
                 headers.push(format!("Content-Encoding: gzip"));
+                encoded_body = gzip_string(&body).expect("Content to be GZip compressible");
             }
         }
     }
 
     let mut response = format!("HTTP/1.1 {}\r\n", status_code);
 
-    for header in headers {
+    if encoded_body.len() == 0 {
+        encoded_body = body.into_bytes();
+    }
+
+    if encoded_body.len() > 0 {
+        headers.push(format!("Content-Length: {}", encoded_body.len()));
+    }
+
+    for header in &headers {
         response.push_str(header.as_str());
         response.push_str("\r\n");
     }
-
+    
     response.push_str("\r\n");
-    response.push_str(body.as_str());
 
-    stream.write(response.as_bytes()).unwrap();
+    let mut encoded_response = response.into_bytes();
+    encoded_response.append(&mut encoded_body);
+
+    stream.write(&encoded_response).unwrap();
     stream.flush().unwrap();
 }
