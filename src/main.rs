@@ -99,10 +99,11 @@ fn handle_request(stream: &mut TcpStream, files_directory: Option<String>) {
         headers.push(format!("Content-Length: {}", body.len()));
 
         if accept_encoding_header.is_some() {
-            let accept_encoding = accept_encoding_header.unwrap().split(": ").nth(1).expect("Accept-Encoding header to have a value").to_string();
+            let accept_encoding_string = accept_encoding_header.unwrap().split(": ").nth(1).expect("Accept-Encoding header to have a value").to_string();
+            let mut accept_encodings = accept_encoding_string.split(", ");
 
-            if accept_encoding == "gzip" {
-                headers.push(format!("Content-Encoding: {}", accept_encoding))
+            if accept_encodings.contains(&"gzip") {
+                headers.push(format!("Content-Encoding: gzip"));
             }
         }
     }
