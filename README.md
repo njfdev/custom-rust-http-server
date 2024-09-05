@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="800" src="https://cloud-i4rbz69gb-hack-club-bot.vercel.app/0screenshot_2024-08-22_at_3.59.07___pm.png">
+</p>
+
 # Custom Rust HTTP Server
 
 This is the repository for a custom HTTP server written in Rust. It is developed with CodeCrafters, but is still my original code.
